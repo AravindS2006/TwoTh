@@ -1,9 +1,9 @@
 /**
  * ModelViewer3D - Interactive 3D model viewer using React Three Fiber.
  */
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { useGLTF, OrbitControls, Html, Loader } from '@react-three/drei';
+import { useGLTF, OrbitControls, Html, Loader, Environment, ContactShadows } from '@react-three/drei';
 import * as THREE from 'three';
 import { motion } from 'framer-motion';
 import type { LightPreset } from '../types';
@@ -13,13 +13,10 @@ interface ModelViewer3DProps {
   wireframe: boolean;
   lightPreset: LightPreset;
   autoRotate: boolean;
-  onScreenshot: () => void;
 }
 
 function AutoScaledModel({ url, wireframe }: { url: string; wireframe: boolean }) {
   const { scene } = useGLTF(url);
-  const ref = useRef<THREE.Group>(null);
-  const { scene: threeScene, camera, gl } = useThree();
 
   useEffect(() => {
     const box = new THREE.Box3().setFromObject(scene);
@@ -47,7 +44,7 @@ function AutoScaledModel({ url, wireframe }: { url: string; wireframe: boolean }
     });
   }, [wireframe, scene]);
 
-  return <primitive object={scene} ref={ref} />;
+  return <primitive object={scene} />;
 }
 
 function SceneLighting({ preset }: { preset: LightPreset }) {
@@ -83,13 +80,11 @@ function SceneLighting({ preset }: { preset: LightPreset }) {
 }
 
 function Turntable({ autoRotate }: { autoRotate: boolean }) {
-  const { scene, camera } = useThree();
-  const [rotation, setRotation] = useState(0);
+  const { scene } = useThree();
 
   useFrame((_, delta) => {
     if (autoRotate) {
       scene.rotation.y += delta * 0.5;
-      setRotation((r) => r + delta * 0.5);
     }
   });
 
@@ -101,7 +96,6 @@ export default function ModelViewer3D({
   wireframe,
   lightPreset,
   autoRotate,
-  onScreenshot,
 }: ModelViewer3DProps) {
   return (
     <motion.div
@@ -116,8 +110,17 @@ export default function ModelViewer3D({
         shadows
       >
         <Suspense fallback={<Html center><Loader /></Html>}>
+          <Environment preset="studio" />
           <SceneLighting preset={lightPreset} />
           <AutoScaledModel url={url} wireframe={wireframe} />
+          <ContactShadows
+            position={[0, -1.2, 0]}
+            opacity={0.45}
+            scale={10}
+            blur={2.5}
+            far={8}
+            resolution={1024}
+          />
           <Turntable autoRotate={autoRotate} />
         </Suspense>
         

@@ -6,6 +6,9 @@
  *   1. Browse Files  — standard file-picker (all images in gallery)
  *   2. Take Photo    — opens camera directly via `capture="environment"`
  *   3. (desktop)     — full drag-and-drop surface as usual
+ *
+ * Expected input: 4 required orthographic views (Front, Back, Left, Right)
+ * plus up to 2 optional views (Top, Bottom).
  */
 import { useCallback, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -16,7 +19,7 @@ interface UploadZoneProps {
   fileCount: number;
 }
 
-const MAX_FILES = 30;
+const MAX_FILES = 6;
 const ACCEPTED = 'image/jpeg,image/png';
 
 /** Detect a coarse-grained touch/mobile environment */
@@ -82,7 +85,6 @@ export default function UploadZone({ onFilesSelected, disabled, fileCount }: Upl
 
   /* ── derived UI state ── */
   const mobile = isMobileDevice();
-  const remaining = MAX_FILES - fileCount;
 
   return (
     <motion.div
@@ -165,8 +167,8 @@ export default function UploadZone({ onFilesSelected, disabled, fileCount }: Upl
             {!isBlocked && (
               <p className="text-xs sm:text-sm text-white/50 mt-1">
                 {fileCount === 0
-                  ? 'Need at least 6 photos from different angles'
-                  : `${fileCount} / ${MAX_FILES} images added — need ${Math.max(0, 6 - fileCount)} more`}
+                  ? 'Need Front, Back, Left, Right views (4 required, up to 6 total)'
+                  : `${fileCount} / ${MAX_FILES} images added — need ${Math.max(0, 4 - fileCount)} more required views`}
               </p>
             )}
           </div>
@@ -237,7 +239,7 @@ export default function UploadZone({ onFilesSelected, disabled, fileCount }: Upl
           transition={{ delay: 0.5 }}
           className="text-center text-xs text-white/35 mt-3 px-4"
         >
-          💡 Tip: Walk around your object in a circle, snapping a photo every 15–20°
+          Tip: Capture orthographic views in order - Front, Back, Left, Right.
         </motion.p>
       )}
     </motion.div>

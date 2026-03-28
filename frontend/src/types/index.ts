@@ -2,6 +2,8 @@
  * Type definitions for the TwoTh application.
  */
 
+export type ViewLabel = 'Front' | 'Back' | 'Left' | 'Right' | 'Top' | 'Bottom';
+
 export interface ImageFile {
   id: string;
   file: File;
@@ -11,17 +13,8 @@ export interface ImageFile {
   label: string;
 }
 
-export interface UploadResponse {
-  job_id: string;
-  image_count: number;
-  images: string[];
-}
-
-export interface StatusEvent {
-  step: string;
-  progress: number;
-  message: string;
-  error?: string;
+export interface GenerationRouteState {
+  sourceImages: File[];
 }
 
 export interface ModelStats {
@@ -29,38 +22,35 @@ export interface ModelStats {
   faces: number;
   file_size_bytes: number;
   file_size_mb: number;
+  pbr_channels?: string[];
+  paint_pipeline?: string;
 }
 
-export interface JobState {
-  job_id: string;
-  status: 'pending' | 'processing' | 'completed' | 'error';
-  progress: number;
-  step: string;
-  message: string;
-  error?: string;
-  stats?: ModelStats;
+export type QueueStage = 'pending' | 'generating' | 'complete' | 'error' | 'unknown';
+
+export interface QueueStatus {
+  stage: QueueStage;
+  rank: number | null;
+  queueSize: number | null;
+  etaSeconds: number | null;
+  progress: number | null;
+  message: string | null;
 }
 
 export type LightPreset = 'studio' | 'outdoor' | 'dramatic';
 
 export interface ReconstructionSteps {
-  extracting: { label: string; progress: number };
-  matching: { label: string; progress: number };
-  sparse: { label: string; progress: number };
-  undistort: { label: string; progress: number };
-  dense: { label: string; progress: number };
-  fusion: { label: string; progress: number };
-  meshing: { label: string; progress: number };
+  queued: { label: string; progress: number };
+  shape: { label: string; progress: number };
+  paint: { label: string; progress: number };
+  optimize: { label: string; progress: number };
   done: { label: string; progress: number };
 }
 
 export const STEPS_CONFIG: ReconstructionSteps = {
-  extracting: { label: 'Extracting features...', progress: 20 },
-  matching: { label: 'Matching keypoints...', progress: 40 },
-  sparse: { label: 'Building sparse model...', progress: 60 },
-  undistort: { label: 'Undistorting images...', progress: 70 },
-  dense: { label: 'Running dense reconstruction...', progress: 80 },
-  fusion: { label: 'Fusing point cloud...', progress: 85 },
-  meshing: { label: 'Generating mesh...', progress: 90 },
+  queued: { label: 'Waiting for ZeroGPU queue...', progress: 5 },
+  shape: { label: 'Generating base mesh with Hunyuan3D-2mv...', progress: 45 },
+  paint: { label: 'Applying PBR textures with Hunyuan3D-2.1 Paint...', progress: 80 },
+  optimize: { label: 'Optimizing GLB output...', progress: 95 },
   done: { label: 'Complete!', progress: 100 },
 };

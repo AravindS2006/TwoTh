@@ -3,33 +3,38 @@
  * Fully responsive: viewer stacks above controls/stats on mobile.
  */
 import { useState, useCallback, Suspense } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReconstructionStatus from '../components/ReconstructionStatus';
 import ModelViewer3D from '../components/ModelViewer3D';
 import ViewerControls from '../components/ViewerControls';
 import ResultsPanel from '../components/ResultsPanel';
 import { useReconstruction } from '../hooks/useReconstruction';
-import { useModelLoader } from '../hooks/useModelLoader';
-import type { LightPreset } from '../types';
-
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+import type { GenerationRouteState, LightPreset } from '../types';
 
 export default function ResultPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const routeState = location.state as GenerationRouteState | null;
+  const sourceImages = routeState?.sourceImages ?? [];
 
   const [wireframe, setWireframe] = useState(false);
   const [lightPreset, setLightPreset] = useState<LightPreset>('studio');
   const [autoRotate, setAutoRotate] = useState(false);
 
-  const { start, currentStep, currentProgress, message, isComplete, isProcessing, error } =
-    useReconstruction(jobId ?? '');
-
-  // Only load model once reconstruction is complete and we have a real jobId
-  const { modelUrl, stats, isLoading: isModelLoading, error: modelError } = useModelLoader(
-    isComplete && jobId ? jobId : '',
-  );
+  const {
+    start,
+    currentStep,
+    currentProgress,
+    message,
+    isComplete,
+    isProcessing,
+    modelUrl,
+    stats,
+    queueStatus,
+    error,
+  } = useReconstruction(sourceImages);
 
   const handleScreenshot = useCallback(() => {
     const canvas = document.querySelector('canvas');
@@ -41,8 +46,11 @@ export default function ResultPage() {
     }
   }, [jobId]);
 
-  const handleDownloadGLB = () => window.open(`${API_BASE}/api/model/${jobId}`, '_blank');
-  const handleDownloadOBJ = () => window.open(`${API_BASE}/api/model/${jobId}/obj`, '_blank');
+  const handleDownloadGLB = useCallback(() => {
+    if (modelUrl) {
+      window.open(modelUrl, '_blank', 'noopener,noreferrer');
+    }
+  }, [modelUrl]);
 
   if (!jobId) {
     return (
@@ -52,11 +60,11 @@ export default function ResultPage() {
     );
   }
 
-  const showReady = !isProcessing && !isComplete;
-  const showProcessing = isProcessing || (isComplete && !modelUrl && !modelError);
-  const showModelLoading = isComplete && isModelLoading && !modelUrl;
-  const showModelError = isComplete && !!modelError && !modelUrl;
-  const showViewer = !!modelUrl && !modelError;
+  const missingImages = sourceImages.length < 4;
+  const showReady = !missingImages && !isProcessing && !isComplete;
+  const showProcessing = isProcessing;
+  const showModelError = !isProcessing && !!error;
+  const showViewer = !!modelUrl;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -98,17 +106,39 @@ export default function ResultPage() {
                 className="glass-panel p-8 max-w-md mx-auto text-center space-y-4"
               >
                 <div className="text-4xl">🚀</div>
-                <h2 className="text-xl font-semibold text-white">Ready to Reconstruct</h2>
+                <h2 className="text-xl font-semibold text-white">Ready to Generate PBR Model</h2>
                 <p className="text-white/50 text-sm leading-relaxed">
-                  Click below to start the 3D reconstruction pipeline. This takes 2–10 minutes
-                  depending on image count.
+                  Click below to send your views to Hugging Face Space. ZeroGPU queue time can vary,
+                  then generation typically runs for 1-3 minutes.
                 </p>
                 <button
                   onClick={start}
                   className="w-full sm:w-auto px-8 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-semibold
                     hover:from-indigo-600 hover:to-purple-600 transition-all duration-200 active:scale-95"
                 >
-                  Start Reconstruction
+                  Start Generation
+                </button>
+              </motion.div>
+            )}
+
+            {/* Missing images warning */}
+            {missingImages && (
+              <motion.div
+                key="missingImages"
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0 }}
+                className="glass-panel p-8 max-w-md mx-auto text-center space-y-4"
+              >
+                <p className="text-red-400">No input views found for this session.</p>
+                <p className="text-white/50 text-sm">
+                  Return to upload and keep the tab open while generating.
+                </p>
+                <button
+                  onClick={() => navigate('/')}
+                  className="px-6 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 text-sm transition-colors"
+                >
+                  Back to Upload
                 </button>
               </motion.div>
             )}
@@ -121,20 +151,8 @@ export default function ResultPage() {
                   progress={currentProgress}
                   message={message}
                   error={error}
+                  queueStatus={queueStatus}
                 />
-              </motion.div>
-            )}
-
-            {/* Model loading spinner */}
-            {showModelLoading && (
-              <motion.div
-                key="modelLoading"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="glass-panel p-12 text-center space-y-4"
-              >
-                <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
-                <p className="text-white/50 text-sm">Preparing 3D model…</p>
               </motion.div>
             )}
 
@@ -146,12 +164,12 @@ export default function ResultPage() {
                 animate={{ opacity: 1 }}
                 className="glass-panel p-8 text-center space-y-4"
               >
-                <p className="text-red-400">{modelError}</p>
+                <p className="text-red-400">{error}</p>
                 <button
-                  onClick={() => window.location.reload()}
+                  onClick={start}
                   className="px-6 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 text-sm transition-colors"
                 >
-                  Retry
+                  Retry Generation
                 </button>
               </motion.div>
             )}
@@ -180,7 +198,6 @@ export default function ResultPage() {
                         wireframe={wireframe}
                         lightPreset={lightPreset}
                         autoRotate={autoRotate}
-                        onScreenshot={handleScreenshot}
                       />
                     </Suspense>
                   </div>
@@ -190,7 +207,6 @@ export default function ResultPage() {
                     jobId={jobId}
                     stats={stats}
                     onDownloadGLB={handleDownloadGLB}
-                    onDownloadOBJ={handleDownloadOBJ}
                   />
                 </div>
 

@@ -24,8 +24,8 @@ export default function ImagePreviewGrid({ files, onRemove }: ImagePreviewGridPr
         <h3 className="text-xs sm:text-sm font-medium text-white/60">
           {files.length} image{files.length !== 1 ? 's' : ''} selected
         </h3>
-        {files.length >= 6 && (
-          <span className="text-xs text-green-400 font-medium">✓ Ready to reconstruct</span>
+        {files.length >= 4 && (
+          <span className="text-xs text-green-400 font-medium">✓ Required views ready</span>
         )}
       </div>
 

@@ -9,7 +9,6 @@ interface ResultsPanelProps {
   jobId: string;
   stats: ModelStats | null;
   onDownloadGLB: () => void;
-  onDownloadOBJ: () => void;
 }
 
 function formatNumber(num: number): string {
@@ -22,7 +21,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export default function ResultsPanel({ jobId, stats, onDownloadGLB, onDownloadOBJ }: ResultsPanelProps) {
+export default function ResultsPanel({ jobId, stats, onDownloadGLB }: ResultsPanelProps) {
   const [copied, setCopied] = useState(false);
 
   const handleShareLink = async () => {
@@ -85,13 +84,7 @@ export default function ResultsPanel({ jobId, stats, onDownloadGLB, onDownloadOB
             onClick={onDownloadGLB}
             className="w-full py-3 rounded-lg font-medium bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white transition-all duration-200"
           >
-            Download GLB (Recommended)
-          </button>
-          <button
-            onClick={onDownloadOBJ}
-            className="w-full py-3 rounded-lg font-medium bg-white/10 hover:bg-white/20 text-white/80 transition-all duration-200"
-          >
-            Download OBJ
+            Download PBR GLB
           </button>
         </div>
       </div>

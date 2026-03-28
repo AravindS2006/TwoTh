@@ -6,12 +6,14 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { motion } from 'framer-motion';
 import * as THREE from 'three';
 import { STEPS_CONFIG } from '../types';
+import type { QueueStatus } from '../types';
 
 interface ReconstructionStatusProps {
   currentStep: string;
   progress: number;
   message: string;
   error?: string | null;
+  queueStatus?: QueueStatus | null;
 }
 
 function RotatingCube() {
@@ -38,13 +40,10 @@ function RotatingCube() {
 }
 
 const steps = [
-  { key: 'extracting', ...STEPS_CONFIG.extracting },
-  { key: 'matching', ...STEPS_CONFIG.matching },
-  { key: 'sparse', ...STEPS_CONFIG.sparse },
-  { key: 'undistort', ...STEPS_CONFIG.undistort },
-  { key: 'dense', ...STEPS_CONFIG.dense },
-  { key: 'fusion', ...STEPS_CONFIG.fusion },
-  { key: 'meshing', ...STEPS_CONFIG.meshing },
+  { key: 'queued', ...STEPS_CONFIG.queued },
+  { key: 'shape', ...STEPS_CONFIG.shape },
+  { key: 'paint', ...STEPS_CONFIG.paint },
+  { key: 'optimize', ...STEPS_CONFIG.optimize },
   { key: 'done', ...STEPS_CONFIG.done },
 ];
 
@@ -53,8 +52,13 @@ export default function ReconstructionStatus({
   progress,
   message,
   error,
+  queueStatus,
 }: ReconstructionStatusProps) {
-  const activeIndex = steps.findIndex(s => s.key === currentStep);
+  const activeIndex = steps.findIndex((s) => s.key === currentStep);
+  const normalizedActiveIndex = activeIndex < 0 ? 0 : activeIndex;
+  const queueEta = queueStatus?.etaSeconds !== null && queueStatus?.etaSeconds !== undefined
+    ? Math.max(1, Math.round(queueStatus.etaSeconds))
+    : null;
 
   return (
     <motion.div
@@ -63,8 +67,23 @@ export default function ReconstructionStatus({
       className="glass-panel p-8 max-w-lg mx-auto"
     >
       <h2 className="text-2xl font-bold text-center mb-6 bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">
-        {error ? 'Reconstruction Failed' : 'Reconstructing Your Object'}
+        {error ? 'Generation Failed' : 'Generating Your 3D Asset'}
       </h2>
+
+      {queueStatus?.stage === 'pending' && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="bg-cyan-500/10 border border-cyan-500/40 rounded-lg p-3 mb-5"
+        >
+          <p className="text-cyan-300 text-sm text-center font-medium">ZeroGPU Queue Status</p>
+          <p className="text-white/70 text-xs text-center mt-1">
+            {queueStatus.rank !== null ? `Position ${queueStatus.rank}` : 'Waiting for queue assignment'}
+            {queueStatus.queueSize !== null ? ` of ${queueStatus.queueSize}` : ''}
+            {queueEta !== null ? `, ETA ~${queueEta}s` : ''}
+          </p>
+        </motion.div>
+      )}
 
       <div className="flex justify-center mb-8">
         <div className="w-32 h-32">
@@ -107,9 +126,9 @@ export default function ReconstructionStatus({
 
           <div className="space-y-2">
             {steps.slice(0, -1).map((step, index) => {
-              const isActive = index === activeIndex;
-              const isComplete = index < activeIndex;
-              const isPending = index > activeIndex;
+              const isActive = index === normalizedActiveIndex;
+              const isComplete = index < normalizedActiveIndex;
+              const isPending = index > normalizedActiveIndex;
 
               return (
                 <motion.div

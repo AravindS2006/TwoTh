@@ -1,10 +1,9 @@
 /**
  * Hook for managing the reconstruction job lifecycle.
  */
-import { useState, useEffect, useCallback, useRef } from 'react';
-import type { StatusEvent } from '../types';
-
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+import { useState, useCallback } from 'react';
+import { generate3DPBR } from '../services/hfClient';
+import type { ModelStats, QueueStatus } from '../types';
 
 interface UseReconstructionReturn {
   start: () => Promise<void>;
@@ -13,82 +12,105 @@ interface UseReconstructionReturn {
   message: string;
   isComplete: boolean;
   isProcessing: boolean;
+  modelUrl: string | null;
+  stats: ModelStats | null;
+  queueStatus: QueueStatus | null;
   error: string | null;
 }
 
-export function useReconstruction(jobId: string): UseReconstructionReturn {
+function toRoundedSeconds(seconds: number | null): number | null {
+  if (seconds === null || Number.isNaN(seconds)) {
+    return null;
+  }
+
+  return Math.max(1, Math.round(seconds));
+}
+
+export function useReconstruction(sourceImages: File[]): UseReconstructionReturn {
   const [currentStep, setCurrentStep] = useState('');
   const [currentProgress, setCurrentProgress] = useState(0);
   const [message, setMessage] = useState('');
   const [isComplete, setIsComplete] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [modelUrl, setModelUrl] = useState<string | null>(null);
+  const [stats, setStats] = useState<ModelStats | null>(null);
+  const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
 
   const start = useCallback(async () => {
+    if (sourceImages.length < 4) {
+      setError('Please provide at least Front, Back, Left, and Right view images.');
+      return;
+    }
+
     setIsProcessing(true);
+    setIsComplete(false);
+    setModelUrl(null);
+    setStats(null);
+    setQueueStatus(null);
     setError(null);
+    setCurrentStep('queued');
+    setMessage('Waiting for a ZeroGPU slot...');
     setCurrentProgress(0);
 
     try {
-      const response = await fetch(`${API_BASE}/api/reconstruct/${jobId}`, {
-        method: 'POST',
+      const result = await generate3DPBR({
+        images: sourceImages,
+        onQueueStatus: (status) => {
+          setQueueStatus(status);
+
+          if (status.stage === 'pending') {
+            const roundedEta = toRoundedSeconds(status.etaSeconds);
+            const queuePosition = status.rank !== null ? `Queue position #${status.rank}` : 'Queued';
+            const queueSize = status.queueSize !== null ? ` of ${status.queueSize}` : '';
+            const eta = roundedEta !== null ? `, ETA ~${roundedEta}s` : '';
+
+            setCurrentStep('queued');
+            setCurrentProgress(8);
+            setMessage(`${queuePosition}${queueSize}${eta}`);
+            return;
+          }
+
+          if (status.stage === 'generating') {
+            const normalizedProgress = status.progress ?? 60;
+
+            if (normalizedProgress < 55) {
+              setCurrentStep('shape');
+            } else if (normalizedProgress < 95) {
+              setCurrentStep('paint');
+            } else {
+              setCurrentStep('optimize');
+            }
+
+            setCurrentProgress(Math.max(20, Math.min(normalizedProgress, 98)));
+            setMessage(status.message ?? 'Running Hunyuan3D shape and PBR paint pipeline...');
+            return;
+          }
+
+          if (status.stage === 'complete') {
+            setCurrentStep('done');
+            setCurrentProgress(100);
+            setMessage('PBR generation complete.');
+          }
+
+          if (status.stage === 'error') {
+            setError(status.message ?? 'Generation failed in Space queue execution.');
+          }
+        },
       });
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.detail || 'Failed to start reconstruction');
-      }
+      setModelUrl(result.modelUrl);
+      setStats(result.stats);
+      setCurrentStep('done');
+      setCurrentProgress(100);
+      setMessage('Your PBR model is ready.');
+      setIsComplete(true);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to start';
-      setError(message);
+      setError(err instanceof Error ? err.message : 'Failed to generate model');
+    } finally {
       setIsProcessing(false);
     }
-  }, [jobId]);
-
-  useEffect(() => {
-    if (!jobId) return;
-
-    const cleanup = () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-    };
-
-    const eventSource = new EventSource(`${API_BASE}/api/status/${jobId}`);
-    eventSourceRef.current = eventSource;
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data: StatusEvent = JSON.parse(event.data);
-        
-        setCurrentStep(data.step);
-        setCurrentProgress(data.progress);
-        setMessage(data.message);
-
-        if (data.error) {
-          setError(data.error);
-          setIsProcessing(false);
-          cleanup();
-        } else if (data.progress >= 100) {
-          setIsComplete(true);
-          setIsProcessing(false);
-          cleanup();
-        }
-      } catch (e) {
-        console.error('Failed to parse status event:', e);
-      }
-    };
-
-    eventSource.onerror = () => {
-      setError('Connection lost');
-      setIsProcessing(false);
-      cleanup();
-    };
-
-    return cleanup;
-  }, [jobId]);
+  }, [sourceImages]);
 
   return {
     start,
@@ -97,6 +119,9 @@ export function useReconstruction(jobId: string): UseReconstructionReturn {
     message,
     isComplete,
     isProcessing,
+    modelUrl,
+    stats,
+    queueStatus,
     error,
   };
 }

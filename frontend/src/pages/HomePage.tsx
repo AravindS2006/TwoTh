@@ -12,27 +12,40 @@ import { useUpload } from '../hooks/useUpload';
 
 export default function HomePage() {
   const navigate = useNavigate();
-  const { files, addFiles, removeFile, upload, uploadProgress, isUploading, error } =
+  const { files, addFiles, removeFile, beginSession, error, clearError } =
     useUpload();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleFilesSelected = useCallback(
     (newFiles: File[]) => {
-      if (!isUploading && !isSubmitting) addFiles(newFiles);
+      if (!isSubmitting) {
+        clearError();
+        addFiles(newFiles);
+      }
     },
-    [addFiles, isUploading, isSubmitting],
+    [addFiles, clearError, isSubmitting],
   );
 
   const handleSubmit = async () => {
-    if (files.length < 6) return;
+    if (files.length < 4) return;
+
     setIsSubmitting(true);
-    const result = await upload();
-    if (result?.job_id) navigate(`/result/${result.job_id}`);
+    const session = beginSession();
+
+    if (session) {
+      const localJobId = crypto.randomUUID();
+      navigate(`/result/${localJobId}`, {
+        state: {
+          sourceImages: session.sourceImages,
+        },
+      });
+    }
+
     setIsSubmitting(false);
   };
 
-  const canSubmit = files.length >= 6 && !isUploading && !isSubmitting;
-  const needMore = files.length > 0 && files.length < 6;
+  const canSubmit = files.length >= 4 && !isSubmitting;
+  const needMore = files.length > 0 && files.length < 4;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -61,7 +74,7 @@ export default function HomePage() {
               </span>
             </h1>
             <p className="text-white/50 text-sm sm:text-base">
-              Upload 6+ photos of any object — get an interactive 3D model in minutes
+              Upload 4-6 orthographic views (Front, Back, Left, Right) for a cinema-grade PBR model
             </p>
           </motion.div>
 
@@ -69,7 +82,7 @@ export default function HomePage() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }}>
             <UploadZone
               onFilesSelected={handleFilesSelected}
-              disabled={isUploading || isSubmitting}
+              disabled={isSubmitting}
               fileCount={files.length}
             />
           </motion.div>
@@ -101,31 +114,6 @@ export default function HomePage() {
             )}
           </AnimatePresence>
 
-          {/* Upload progress bar */}
-          <AnimatePresence>
-            {isUploading && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="space-y-2"
-              >
-                <div className="flex justify-between text-xs text-white/50">
-                  <span>Uploading images…</span>
-                  <span>{uploadProgress}%</span>
-                </div>
-                <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                  <motion.div
-                    className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-cyan-400"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${uploadProgress}%` }}
-                    transition={{ ease: 'easeOut' }}
-                  />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           {/* Minimum count hint */}
           <AnimatePresence>
             {needMore && (
@@ -135,7 +123,7 @@ export default function HomePage() {
                 exit={{ opacity: 0 }}
                 className="text-center text-white/40 text-sm"
               >
-                Add {6 - files.length} more image{6 - files.length > 1 ? 's' : ''} to unlock reconstruction
+                Add {4 - files.length} more required view{4 - files.length > 1 ? 's' : ''} (Front, Back, Left, Right)
               </motion.p>
             )}
           </AnimatePresence>
@@ -163,10 +151,10 @@ export default function HomePage() {
                   `}
                 >
                   {isSubmitting
-                    ? 'Uploading…'
+                    ? 'Preparing Session...'
                     : needMore
-                      ? `Need ${6 - files.length} more image${6 - files.length > 1 ? 's' : ''}`
-                      : `Start Reconstruction (${files.length} photos)`}
+                      ? `Need ${4 - files.length} more view${4 - files.length > 1 ? 's' : ''}`
+                      : `Start PBR Generation (${files.length} views)`}
                 </button>
               </motion.div>
             )}
@@ -181,9 +169,9 @@ export default function HomePage() {
               className="grid grid-cols-3 gap-3 pt-4"
             >
               {[
-                { icon: '📸', title: 'Photograph', desc: 'Take 6–30 photos around your object' },
-                { icon: '⚙️', title: 'Reconstruct', desc: 'COLMAP builds a 3D point cloud & mesh' },
-                { icon: '🌐', title: 'Explore', desc: 'Interact with your 3D model in the browser' },
+                { icon: '📸', title: 'Capture', desc: 'Collect Front, Back, Left, Right views (plus optional Top/Bottom)' },
+                { icon: '🎨', title: 'Generate', desc: 'Hunyuan3D-2mv shape + Hunyuan3D-2.1 Paint PBR texturing' },
+                { icon: '🌐', title: 'Explore', desc: 'Inspect physically based materials under studio lighting' },
               ].map((step) => (
                 <div key={step.title} className="glass-panel p-4 text-center space-y-1">
                   <div className="text-2xl">{step.icon}</div>
@@ -197,7 +185,7 @@ export default function HomePage() {
       </main>
 
       <footer className="py-4 text-center text-white/20 text-xs">
-        Powered by COLMAP · Three.js · FastAPI
+        Powered by Hugging Face Spaces · Hunyuan3D · Three.js
       </footer>
     </div>
   );
